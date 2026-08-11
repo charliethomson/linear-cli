@@ -15,6 +15,14 @@ export function getClient(): LinearClient {
     );
   }
 
-  _client = new LinearClient({ apiKey: result!.key });
+  // LINEAR_API_URL overrides the API endpoint. Unset in normal use; the test
+  // suite points it at a local fake so the real binary can be exercised
+  // end-to-end without touching a live workspace.
+  const apiUrl = process.env['LINEAR_API_URL'];
+
+  _client = new LinearClient({
+    apiKey: result!.key,
+    ...(apiUrl ? { apiUrl } : {}),
+  });
   return _client;
 }

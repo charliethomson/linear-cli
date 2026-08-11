@@ -1,0 +1,4 @@
+{
+  "//": "Scopes the test suite to ESM without adding \"type\": \"module\" to the root package.json — the root must stay CJS so Node treats the esbuild --format=cjs bundle in dist/ correctly.",
+  "type": "module"
+}
