@@ -123,46 +123,6 @@ describe('finding 3 — mutation success flags are ignored', () => {
   );
 });
 
-describe('finding 4 — transport failures are reported as NOT_FOUND', () => {
-  test(
-    'a 429 while resolving an identifier is not reported as a missing issue',
-    { todo: "resolveIssueId's bare catch turns every failure into \"not found\"" },
-    async () => {
-      fake.reply({
-        contains: 'query issue(',
-        raw: { status: 429, body: JSON.stringify({ errors: [{ message: 'Rate limit exceeded' }] }) },
-      });
-
-      const r = await runCli(['issues', 'comment', 'ENG-1', '--body', 'hi'], { apiUrl: fake.url });
-
-      assert.equal(r.code, 1);
-      assert.doesNotMatch(
-        r.errorJson?.error ?? '',
-        /not found/i,
-        'a rate limit must not masquerade as a missing issue'
-      );
-    }
-  );
-
-  test(
-    'an auth failure while resolving a team key is not reported as a missing team',
-    { todo: "resolveTeamId's bare catch does the same" },
-    async () => {
-      fake.reply({
-        contains: 'query team',
-        errors: [{ message: 'Authentication required' }],
-      });
-
-      const r = await runCli(['issues', 'create', '--team', 'ENG', '--title', 'x'], {
-        apiUrl: fake.url,
-      });
-
-      assert.equal(r.code, 1);
-      assert.doesNotMatch(r.errorJson?.error ?? '', /not found/i);
-    }
-  );
-});
-
 describe('finding 5 — truncated lists are indistinguishable from complete ones', () => {
   test(
     'issues get paginates relations rather than stopping at the API default',

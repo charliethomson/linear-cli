@@ -25,12 +25,34 @@ linear auth set lin_api_XXXX
 - Error (stderr): `{"error": "message", "code": "ERROR_CODE"}`
 - Exit 0 on success, 1 on error
 
+**Global flags**: `--human` and `--no-retry` are accepted before or after the subcommand.
+
 **Human mode** (`--human` flag): Chalk-colored tables and human-readable messages. Accepted
 before or after the subcommand (`linear --human issues list` and `linear issues list --human`
 both work). Human mode renders scalar fields only — nested objects (`state`, `assignee`,
 `project`, `labels`) are omitted from tables, so use the default JSON mode when you need them.
 
 Always use the default (AI mode) when running commands to parse results.
+
+## Rate limiting and retries
+
+Linear rate-limits by request count and by query complexity. Every request the CLI makes is
+retried automatically on a rate limit or a transient transport failure:
+
+- **3 attempts total**, with exponential backoff and full jitter. `Retry-After` is honoured when
+  the server sends it, capped at 30s so a command cannot stall indefinitely.
+- **A 429 is always retried**, including for mutations — the request was refused, so nothing was
+  applied.
+- **A 5xx is retried for reads only.** A write that fails with a 5xx may have landed before the
+  response was lost, so retrying `issues create` could produce a duplicate issue. Mutations fail
+  fast on 5xx by design.
+- **`--no-retry`** disables it and fails on the first attempt.
+
+This matters most for `bulk-create` / `bulk-update`, where the default `--concurrency 5` is what
+provokes rate limiting in the first place.
+
+Errors caused by rate limiting keep their own identity — they are **not** reported as
+`NOT_FOUND`. A `NOT_FOUND` from this CLI means the entity genuinely does not exist.
 
 ## Reference resolution
 

@@ -1,4 +1,20 @@
 import type { LinearClient } from '@linear/sdk';
+import { isNotFoundError } from './output.js';
+
+/**
+ * Raised only when the API says the entity genuinely does not exist.
+ *
+ * These helpers used to catch every failure and report "not found", which meant
+ * a rate limit, an expired key or a network blip during resolution all surfaced
+ * as a missing issue — sending the operator to look for a data problem that was
+ * never there. Callers distinguish this from a transport failure by type.
+ */
+export class NotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NotFoundError';
+  }
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -19,8 +35,9 @@ export async function resolveIssueId(client: LinearClient, ref: string): Promise
   try {
     const issue = await client.issue(ref);
     return issue.id;
-  } catch {
-    throw new Error(`Issue '${ref}' not found`);
+  } catch (err) {
+    if (isNotFoundError(err)) throw new NotFoundError(`Issue '${ref}' not found`);
+    throw err;
   }
 }
 
@@ -41,7 +58,8 @@ export async function resolveTeamId(client: LinearClient, ref: string): Promise<
     const team = await client.team(ref);
     teamIdCache.set(ref, team.id);
     return team.id;
-  } catch {
-    throw new Error(`Team '${ref}' not found`);
+  } catch (err) {
+    if (isNotFoundError(err)) throw new NotFoundError(`Team '${ref}' not found`);
+    throw err;
   }
 }

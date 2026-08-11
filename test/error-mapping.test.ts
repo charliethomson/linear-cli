@@ -91,7 +91,9 @@ describe('GraphQL error extraction', () => {
       },
     });
 
-    const r = await runCli(['issues', 'list'], { apiUrl: fake.url });
+    // --no-retry keeps this focused on error mapping; retry behaviour and the
+    // Retry-After honouring are covered in retry.test.ts.
+    const r = await runCli(['--no-retry', 'issues', 'list'], { apiUrl: fake.url });
 
     assert.equal(r.code, 1);
     assert.ok(r.errorJson, 'rate limiting must not break the JSON contract');

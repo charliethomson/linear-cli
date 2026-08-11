@@ -1,6 +1,7 @@
 import { LinearClient } from '@linear/sdk';
 import { getApiKey } from './config.js';
 import { outputError } from './output.js';
+import { withRetry } from './retry.js';
 
 let _client: LinearClient | null = null;
 
@@ -24,5 +25,14 @@ export function getClient(): LinearClient {
     apiKey: result!.key,
     ...(apiUrl ? { apiUrl } : {}),
   });
+
+  // Every request goes through client.request — the SDK's own methods are built
+  // on `(doc, vars) => this.client.request(doc, vars)`, and this CLI's raw
+  // GraphQL queries call it directly. Wrapping it here is the single seam that
+  // covers both, so retry behaviour cannot diverge between them.
+  const inner = _client.client.request.bind(_client.client);
+  (_client.client as any).request = (document: unknown, variables?: unknown) =>
+    withRetry(() => inner(document as any, variables as any), { document });
+
   return _client;
 }

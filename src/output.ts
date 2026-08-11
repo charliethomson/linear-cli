@@ -49,12 +49,26 @@ export function errorMessage(err: unknown, fallback: string): string {
  * matches the API's own not-found signal and nothing else.
  */
 export function isNotFoundError(err: unknown): boolean {
-  const graphqlErrors = (err as any)?.response?.errors ?? (err as any)?.errors;
-  if (!Array.isArray(graphqlErrors)) return false;
-  return graphqlErrors.some(
-    (e: any) =>
-      /entity not found/i.test(e?.message ?? '') ||
-      /could not find referenced/i.test(e?.extensions?.userPresentableMessage ?? '')
+  const e = err as any;
+
+  // Two shapes reach this. A raw client error carries response.errors with the
+  // API's own wording; the SDK re-wraps the same failure as a LinearError whose
+  // `errors` entries hold only the user-presentable text. Both must match, or
+  // the classification silently depends on which code path made the request.
+  const graphqlErrors = e?.response?.errors ?? e?.errors;
+  const candidates: string[] = [];
+
+  if (typeof e?.message === 'string') candidates.push(e.message);
+  if (Array.isArray(graphqlErrors)) {
+    for (const g of graphqlErrors) {
+      if (typeof g?.message === 'string') candidates.push(g.message);
+      const presentable = g?.extensions?.userPresentableMessage;
+      if (typeof presentable === 'string') candidates.push(presentable);
+    }
+  }
+
+  return candidates.some(
+    (m) => /entity not found/i.test(m) || /could not find referenced/i.test(m)
   );
 }
 

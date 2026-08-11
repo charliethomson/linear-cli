@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import * as fs from 'fs';
 import * as readline from 'readline';
 import { getClient } from '../client.js';
-import { isUuid, resolveIssueId, resolveTeamId } from '../resolve.js';
+import { isUuid, NotFoundError, resolveIssueId, resolveTeamId } from '../resolve.js';
 import {
   errorMessage,
   isHumanMode,
@@ -715,8 +715,13 @@ issueRelationsCommand
       let issueId: string;
       try {
         issueId = await resolveIssueId(client, identifier);
-      } catch {
-        outputError(`Issue '${identifier}' not found`, 'NOT_FOUND');
+      } catch (err) {
+        // Only a genuine miss is NOT_FOUND; a 429 or auth failure must keep its
+        // own identity rather than being reported as a missing issue.
+        if (err instanceof NotFoundError) {
+          outputError(err.message, 'NOT_FOUND');
+        }
+        throw err;
       }
 
       const data = await (client.client as any).request(
@@ -770,7 +775,10 @@ issueRelationsCommand
           resolveIssueId(client, opts.related),
         ]);
       } catch (err) {
-        outputError(errorMessage(err, 'Issue not found'), 'NOT_FOUND');
+        if (err instanceof NotFoundError) {
+          outputError(err.message, 'NOT_FOUND');
+        }
+        throw err;
       }
 
       const payload = await client.createIssueRelation({

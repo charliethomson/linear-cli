@@ -34,6 +34,11 @@ export interface Reply {
   errors?: GraphQLError[];
   /** Respond with a raw status + body, for transport-level failures (429, 500). */
   raw?: { status: number; body: string; headers?: Record<string, string> };
+  /**
+   * One full response per successive matching call; the last repeats once
+   * exhausted. Needed to script recovery — e.g. two 429s followed by a success.
+   */
+  responses?: Array<Pick<Reply, 'data' | 'errors' | 'raw'>>;
 }
 
 interface Rule extends Reply {
@@ -103,6 +108,28 @@ export class FakeLinear {
     }
 
     const call = rule.calls++;
+
+    // A scripted response for this call supersedes the rule's own fields.
+    const scripted = rule.responses
+      ? rule.responses[Math.min(call, rule.responses.length - 1)]
+      : undefined;
+    if (scripted) {
+      if (scripted.raw) {
+        res.writeHead(scripted.raw.status, {
+          'content-type': 'application/json',
+          ...scripted.raw.headers,
+        });
+        res.end(scripted.raw.body);
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify(
+          scripted.errors ? { data: null, errors: scripted.errors } : { data: scripted.data }
+        )
+      );
+      return;
+    }
 
     if (rule.raw) {
       res.writeHead(rule.raw.status, {

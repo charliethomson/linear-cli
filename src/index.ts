@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { setHumanMode } from './output.js';
+import { setRetryEnabled } from './retry.js';
 import { authCommand } from './commands/auth.js';
 import { meCommand } from './commands/me.js';
 import { teamsCommand } from './commands/teams.js';
@@ -17,10 +18,14 @@ program
   .description('CLI tool for interacting with Linear, optimized for AI consumption')
   .version('1.0.0')
   .option('--human', 'Enable human-friendly output with colors and tables')
+  .option('--no-retry', 'Fail fast instead of retrying rate-limited or transient failures')
   .hook('preAction', (thisCommand) => {
-    const opts = thisCommand.opts() as { human?: boolean };
+    const opts = thisCommand.opts() as { human?: boolean; retry?: boolean };
     if (opts.human) {
       setHumanMode(true);
+    }
+    if (opts.retry === false) {
+      setRetryEnabled(false);
     }
   });
 

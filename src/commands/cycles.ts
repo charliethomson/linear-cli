@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import type { LinearClient } from '@linear/sdk';
 import { getClient } from '../client.js';
-import { resolveIssueId, resolveTeamId } from '../resolve.js';
+import { NotFoundError, resolveIssueId, resolveTeamId } from '../resolve.js';
 import { errorMessage, outputData, outputError, outputSuccess } from '../output.js';
 
 export const cyclesCommand = new Command('cycles')
@@ -237,7 +237,10 @@ cyclesCommand
       try {
         issueIds = await Promise.all(opts.issue.map((v) => resolveIssueId(client, v)));
       } catch (err) {
-        outputError(errorMessage(err, 'Issue not found'), 'NOT_FOUND');
+        if (err instanceof NotFoundError) {
+          outputError(err.message, 'NOT_FOUND');
+        }
+        throw err;
       }
       const results = await Promise.allSettled(
         issueIds.map(issueId => client.updateIssue(issueId, { cycleId: id }))
@@ -269,7 +272,10 @@ cyclesCommand
       try {
         issueIds = await Promise.all(opts.issue.map((v) => resolveIssueId(client, v)));
       } catch (err) {
-        outputError(errorMessage(err, 'Issue not found'), 'NOT_FOUND');
+        if (err instanceof NotFoundError) {
+          outputError(err.message, 'NOT_FOUND');
+        }
+        throw err;
       }
       const results = await Promise.allSettled(
         issueIds.map(issueId => client.updateIssue(issueId, { cycleId: null }))
