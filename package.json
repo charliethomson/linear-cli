@@ -10,6 +10,7 @@
     "build": "npm run typecheck && esbuild src/index.ts --bundle --platform=node --format=cjs --target=node18 --banner:js='#!/usr/bin/env node' --outfile=dist/linear.js && chmod +x dist/linear.js",
     "dev": "tsx src/index.ts",
     "start": "node dist/linear.js",
+    "prepare": "npm run build",
     "reinstall": "npm run build && npm install -g ."
   },
   "dependencies": {
