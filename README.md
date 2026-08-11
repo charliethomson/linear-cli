@@ -321,6 +321,18 @@ client at the fake; it is unset in normal use.
 tool. Most describe failures that were invisible from outside — commands that exited 0 having
 done nothing, and errors that reported the wrong cause.
 
+## Engineering standards
+
+This repo vendors the shared standards at [`standards/`](standards/) (a git submodule) and is
+registered as the `cli-tool` archetype. [`AGENTS.md`](AGENTS.md) is the entrypoint — it records
+the deviations, which matter here because the archetype assumes Rust and this is a TypeScript
+CLI.
+
+```sh
+git submodule update --init            # after cloning
+standards/bin/standards sync           # pull newer standards
+```
+
 ## Notes for agents
 
 `ai/skills/linear.md` is the skill document describing this CLI for Claude Code, and is the
