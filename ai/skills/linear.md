@@ -448,5 +448,10 @@ Error codes:
 4. **Parse JSON output** directly — all fields are consistent and documented above
 5. **Team keys** (like `ENG`) and **issue identifiers** (like `ENG-123`) work anywhere the
    corresponding UUID is accepted — see "Reference resolution" above
-6. **`issues delete` is a hard delete** and does not prompt in AI mode — prefer `issues archive`
+6. **`issues delete` moves an issue to Trash** and does not prompt in AI mode. It is recoverable
+   from Trash in the Linear UI until Linear purges it, but prefer `issues archive` when you only
+   want the issue out of the way
 7. **`--label` on `issues update` replaces the full label set**, so pass every label you want kept
+8. **Check `failedCount` on bulk commands**, not the exit code — a partial failure still exits 0
+9. **Use `none` to clear a field** on `issues update` (`--assignee none`), since an omitted flag
+   means "leave unchanged"

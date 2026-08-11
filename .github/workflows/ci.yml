@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push to the same branch makes the first run irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # 18 is the floor declared by @linear/sdk's engines field and the
+        # esbuild --target; 22 is current LTS. Both are checked so the build
+        # target and the version people actually run stay honest.
+        node: ['18', '22']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # `npm ci` triggers the `prepare` script, which runs the full build
+      # (typecheck included). --ignore-scripts keeps install and verification
+      # separate so a failure points at the step that caused it.
+      - name: Install
+        run: npm ci --ignore-scripts
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      # The suite spawns dist/linear.js against a local fake GraphQL server, so
+      # it needs the build above but never reaches the network. No API key is
+      # required, and none should ever be added here.
+      - name: Test
+        run: npm test
