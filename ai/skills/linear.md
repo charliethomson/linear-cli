@@ -150,7 +150,15 @@ Issue create/update options:
 - `--description <text>` — inline description
 - `--description-file <path>` — read description from file (preferred for long markdown)
 - `--description -` — read from stdin
-- `--priority <0-4>` — 0=none, 1=urgent, 2=high, 3=medium, 4=low
+- `--priority <0-4>` — 0=none, 1=urgent, 2=high, 3=medium, 4=low. When filing issues from an
+  analysis, assign it by consequence rather than by how annoying the problem is:
+
+  | Priority | Use for |
+  |---|---|
+  | `1` urgent | Security holes, data-loss risks, production outages |
+  | `2` high | Wrong behaviour, broken or skipped tests, `FIXME`/`HACK` |
+  | `3` medium | Missing tests on real paths, performance problems, `TODO`s with impact |
+  | `4` low | Style, cosmetic refactors, minor cleanup |
 - `--state <id>` — workflow state ID
 - `--assignee <id>` — user ID
 - `--project <id>` — project ID
