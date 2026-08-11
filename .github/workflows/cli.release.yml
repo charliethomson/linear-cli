@@ -1,0 +1,126 @@
+name: cli · release
+
+# Publishes the bundled CLI to GitHub Releases.
+#
+# Deviates from standards/docs/registry-publishing.md, which sends client
+# artifacts to apps.dev.thmsn.dev on self-hosted runners. This tool is a single
+# platform-independent JS file with no signing or notarization step, so a
+# GitHub Release on hosted runners carries it without the registry's machinery.
+# Recorded in AGENTS.md.
+
+on:
+  # Tags are the MAJOR.MINOR knob (standards/docs/versioning.md), so a tag push
+  # is the natural release boundary.
+  push:
+    tags: ['v[0-9]*']
+  # Cut a release from any commit without moving MAJOR.MINOR.
+  workflow_dispatch:
+
+concurrency:
+  group: cli.release-${{ github.ref }}
+  # Deliberately not cancel-in-progress: aborting midway through publishing
+  # leaves a release with a partial set of assets.
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write # create the release and upload assets
+
+    steps:
+      # Full history and tags — the version derives from the commit count, and a
+      # shallow clone undercounts.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # Canonical version: <tag MAJOR>.<tag MINOR>.<commit count>. Resolved once
+      # here and exported, so the build stamps exactly what gets published
+      # rather than deriving it a second time.
+      - name: Resolve version
+        run: |
+          set -euo pipefail
+          echo "RELEASE_VERSION=$(sh scripts/version.sh)" >> "$GITHUB_ENV"
+
+      - name: Install
+        run: npm ci --ignore-scripts
+
+      - name: Build
+        run: npm run build
+
+      # Never publish an artifact that has not passed the gate.
+      - name: Test
+        run: npm test
+
+      # Guards against a silently broken version injection — publishing an
+      # artifact that reports 0.0.0-dev would be worse than failing here.
+      - name: Verify the artifact reports the release version
+        run: |
+          set -euo pipefail
+          built="$(node dist/linear.js --version)"
+          echo "built: $built / expected: $RELEASE_VERSION"
+          [ "$built" = "$RELEASE_VERSION" ] || {
+            echo "::error::built version '$built' does not match '$RELEASE_VERSION'"
+            exit 1
+          }
+
+      - name: Stage assets
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          # A stable asset name keeps the /releases/latest/download/ URL usable.
+          cp dist/linear.js release/linear.js
+          cd release
+          sha256sum linear.js > linear.js.sha256
+          cat linear.js.sha256
+
+      # On a tag push, release against that tag; on manual dispatch, tag with
+      # the derived version. Either way MAJOR.MINOR still comes from the most
+      # recent manual tag, so an auto-created tag cannot drift it.
+      - name: Resolve release tag
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "RELEASE_TAG=${GITHUB_REF#refs/tags/}" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_TAG=v$RELEASE_VERSION" >> "$GITHUB_ENV"
+          fi
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          notes="$(cat <<EOF
+          \`linear.js\` is the bundled CLI — a single self-contained file requiring Node 18+.
+
+          \`\`\`sh
+          curl -fsSL -o linear https://github.com/${{ github.repository }}/releases/download/$RELEASE_TAG/linear.js
+          chmod +x linear && ./linear --version   # $RELEASE_VERSION
+          \`\`\`
+
+          Verify with \`sha256sum -c linear.js.sha256\`.
+
+          Built version: \`$RELEASE_VERSION\` (commit \`${GITHUB_SHA:0:8}\`).
+          EOF
+          )"
+
+          # Idempotent: re-running a dispatch for the same version replaces the
+          # assets rather than failing on an existing release.
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release/linear.js release/linear.js.sha256 --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              release/linear.js release/linear.js.sha256 \
+              --title "$RELEASE_TAG" \
+              --notes "$notes" \
+              --target "$GITHUB_SHA"
+          fi

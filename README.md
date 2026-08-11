@@ -14,12 +14,23 @@ linear issues list --team ENG --limit 20
 
 ## Install
 
+Grab the bundled CLI from the latest release — a single self-contained file, no `npm install`:
+
+```bash
+curl -fsSL -o linear https://github.com/charliethomson/linear-cli/releases/latest/download/linear.js
+chmod +x linear && ./linear --version
+```
+
+Verify it with `sha256sum -c linear.js.sha256` against the checksum published alongside it.
+
+Or install from a clone, which symlinks the global bin into the working tree:
+
 ```bash
 npm install -g .
 ```
 
 `dist/linear.js` is built automatically on install and is not checked in. Requires Node 18 or
-newer.
+newer either way.
 
 ## Authentication
 
@@ -316,6 +327,19 @@ sets `RELEASE_VERSION` once per run, which takes precedence. Outside a git check
 from a packed tarball — it reports `0.0.0`.
 
 See [standards/docs/versioning.md](standards/docs/versioning.md).
+
+## Releasing
+
+`cli.release.yml` publishes `linear.js` plus its SHA-256 to GitHub Releases, on a GitHub-hosted
+runner. It runs the full test suite and asserts the built artifact reports the resolved version
+before publishing anything.
+
+- **Pushing a `v*` tag** releases at that boundary, and is what moves `MAJOR.MINOR`.
+- **`workflow_dispatch`** cuts a release from any commit without moving `MAJOR.MINOR`; it tags
+  `v<derived version>`.
+
+Re-running a dispatch for a version that already has a release replaces the assets rather than
+failing.
 
 ## Development
 
