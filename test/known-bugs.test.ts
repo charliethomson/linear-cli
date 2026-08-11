@@ -7,11 +7,13 @@ import { FakeLinear, issuePage, sdkIssue } from './helpers/fake-linear.js';
 import { runCli } from './helpers/run-cli.js';
 
 /**
- * The audit findings, written as the assertions they *should* satisfy.
+ * Regression tests for the findings of the first review of this CLI.
  *
- * Every test here is marked `todo`, so the suite stays green as a baseline
- * while each one names an outstanding defect. Fixing a finding means deleting
- * its `{ todo: ... }` flag — at which point it becomes a real regression test.
+ * These began as `todo` specs written against behaviour the tool did not yet
+ * have — each one named a defect and asserted what it should do instead. All of
+ * them now pass. They are kept as regressions because most describe failures
+ * that were invisible from the outside: commands that exited 0 having done
+ * nothing, and errors that reported the wrong cause.
  *
  * Do not "fix" a failure here by weakening the assertion; the assertion is the
  * specification.
@@ -122,7 +124,6 @@ describe('finding 3 — mutation success flags are ignored', () => {
 describe('finding 5 — truncated lists are indistinguishable from complete ones', () => {
   test(
     'issues get paginates relations rather than stopping at the API default',
-    { todo: 'issue.relations() takes no first/after, so long blocking chains are cut short' },
     async () => {
       const many = Array.from({ length: 60 }, (_, n) => ({
         id: `r${n}`,
@@ -131,8 +132,25 @@ describe('finding 5 — truncated lists are indistinguishable from complete ones
       }));
 
       fake.reply({ contains: 'query issue(', data: { issue: sdkIssue() } });
+      // `issues get` resolves the issue's state lazily through the SDK.
       fake.reply({
-        contains: 'query issue_relations',
+        contains: 'query workflowState',
+        data: {
+          workflowState: {
+            id: 's1',
+            name: 'Todo',
+            type: 'unstarted',
+            color: '#000',
+            position: 1,
+            description: null,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+            team: { id: 't1' },
+          },
+        },
+      });
+      fake.reply({
+        contains: 'IssueRelationsPaged',
         data: {
           issue: {
             relations: { nodes: many, pageInfo: { hasNextPage: false, endCursor: null } },
@@ -151,29 +169,47 @@ describe('finding 5 — truncated lists are indistinguishable from complete ones
     }
   );
 
-  test(
-    'labels list signals that more pages exist',
-    { todo: 'no list command except issues list surfaces hasNextPage in any form' },
-    async () => {
-      fake.reply({
-        contains: 'query issueLabels',
-        data: {
-          issueLabels: {
-            nodes: [{ id: 'l1', name: 'bug', color: '#f00', description: null }],
-            pageInfo: { hasNextPage: true, endCursor: 'c1' },
+  test('labels list follows pagination instead of stopping at the first page', async () => {
+    const page = (prefix: string, n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        id: `${prefix}${i}`,
+        name: `${prefix}${i}`,
+        color: '#f00',
+        description: null,
+      }));
+
+    fake.reply({
+      contains: 'query issueLabels',
+      responses: [
+        {
+          data: {
+            issueLabels: {
+              nodes: page('a', 250),
+              pageInfo: { hasNextPage: true, endCursor: 'c1' },
+            },
           },
         },
-      });
+        {
+          data: {
+            issueLabels: {
+              nodes: page('b', 10),
+              pageInfo: { hasNextPage: false, endCursor: null },
+            },
+          },
+        },
+      ],
+    });
 
-      const r = await runCli(['labels', 'list'], { apiUrl: fake.url });
+    const r = await runCli(['labels', 'list', '--limit', '500'], { apiUrl: fake.url });
 
-      assert.notEqual(
-        JSON.stringify(r.json).includes('hasNextPage'),
-        false,
-        'a truncated list must be distinguishable from a complete one'
-      );
-    }
-  );
+    assert.equal(r.code, 0);
+    assert.equal(
+      r.json.data.length,
+      260,
+      'a workspace with more labels than one page must not silently lose the rest'
+    );
+    assert.equal(fake.requestsMatching('query issueLabels').length, 2);
+  });
 });
 
 describe('finding 6 — null relatedIssue crashes relations list', () => {
@@ -182,7 +218,7 @@ describe('finding 6 — null relatedIssue crashes relations list', () => {
     async () => {
       fake.reply({ contains: 'query issue(', data: { issue: sdkIssue() } });
       fake.reply({
-        contains: 'IssueRelations',
+        contains: 'IssueRelationsPaged',
         data: {
           issue: {
             relations: {
@@ -191,9 +227,10 @@ describe('finding 6 — null relatedIssue crashes relations list', () => {
                 {
                   id: 'r2',
                   type: 'blocks',
-                  relatedIssue: { identifier: 'ENG-2', title: 't', url: 'u' },
+                  relatedIssue: { id: 'i2', identifier: 'ENG-2', title: 't', url: 'u' },
                 },
               ],
+              pageInfo: { hasNextPage: false, endCursor: null },
             },
           },
         },
@@ -249,7 +286,6 @@ describe('finding 8 — cycles get miscodes a missing cycle', () => {
 describe('finding 13 — numeric options are not validated', () => {
   test(
     'a non-numeric --priority is rejected instead of filtering on null',
-    { todo: 'parseInt("high") is NaN, which serialises to null in the filter' },
     async () => {
       fake.reply({ contains: 'query Issues', data: issuePage([], { hasNextPage: false }) });
 
@@ -263,7 +299,6 @@ describe('finding 13 — numeric options are not validated', () => {
 
   test(
     'a non-numeric --estimate is rejected on create',
-    { todo: 'same parseInt path on the mutation side' },
     async () => {
       stubCreateIssue();
 
@@ -281,7 +316,6 @@ describe('finding 13 — numeric options are not validated', () => {
 describe('finding 14 — issues update cannot clear a field', () => {
   test(
     'an issue can be unassigned',
-    { todo: 'truthiness guards mean there is no way to send assigneeId: null' },
     async () => {
       fake.reply({ contains: 'query issue(', data: { issue: sdkIssue() } });
       fake.reply({

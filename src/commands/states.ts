@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { getClient } from '../client.js';
 import { resolveTeamId } from '../resolve.js';
+import { fetchAll, parseLimit } from '../paginate.js';
 import { errorMessage, outputData, outputError, outputSuccess } from '../output.js';
 
 export const statesCommand = new Command('states')
@@ -10,14 +11,23 @@ statesCommand
   .command('list')
   .description('List workflow states for a team')
   .requiredOption('--team <id>', 'Team ID or key (e.g. ENG)')
-  .action(async (opts: { team: string }) => {
+  .option('--limit <n>', 'Maximum number of states to return', '250')
+  .action(async (opts: { team: string; limit?: string }) => {
     try {
       const client = getClient();
-      const states = await client.workflowStates({
-        filter: { team: { id: { eq: await resolveTeamId(client, opts.team) } } },
-      });
+      const limit = parseLimit(opts.limit, 250);
+      const teamId = await resolveTeamId(client, opts.team);
+      const nodes = await fetchAll(
+        ({ first, after }) =>
+          client.workflowStates({
+            first,
+            ...(after ? { after } : {}),
+            filter: { team: { id: { eq: teamId } } },
+          }),
+        limit
+      );
       outputData(
-        states.nodes.map((s) => ({
+        nodes.map((s) => ({
           id: s.id,
           name: s.name,
           type: s.type,

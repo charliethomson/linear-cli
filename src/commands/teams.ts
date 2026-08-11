@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import type { Team } from '@linear/sdk';
 import { getClient } from '../client.js';
 import { errorMessage, outputData, outputError } from '../output.js';
+import { fetchAll, parseLimit } from '../paginate.js';
 
 export const teamsCommand = new Command('teams')
   .description('Manage teams');
@@ -18,13 +19,18 @@ async function memberCount(team: Team): Promise<number> {
 teamsCommand
   .command('list')
   .description('List all teams')
-  .action(async () => {
+  .option('--limit <n>', 'Maximum number of teams to return', '250')
+  .action(async (opts: { limit?: string }) => {
     try {
       const client = getClient();
-      const teams = await client.teams();
+      const limit = parseLimit(opts.limit, 250);
+      const nodes = await fetchAll(
+        ({ first, after }) => client.teams({ first, ...(after ? { after } : {}) }),
+        limit
+      );
       outputData(
         await Promise.all(
-          teams.nodes.map(async (t) => ({
+          nodes.map(async (t) => ({
             id: t.id,
             name: t.name,
             key: t.key,

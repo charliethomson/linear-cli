@@ -157,6 +157,14 @@ Issue create/update options:
 - `--label <id>` — label ID (repeatable; on `update` this **replaces** all labels)
 - `--estimate <n>` — story points
 
+**Clearing a field on `update`.** An omitted flag means "leave unchanged", so `none` is the
+sentinel for "clear this": `--assignee none` unassigns, `--project none` removes the issue from
+its project, `--estimate none` clears the estimate, and `--label none` removes all labels.
+
+**Numeric options are validated.** `--priority` must be an integer 0–4 and `--estimate` a
+non-negative integer; anything else fails with `INVALID_INPUT` rather than being coerced.
+`--concurrency` on the bulk commands must be a positive integer.
+
 `issues list` returns, per issue:
 `{id, identifier, title, priority, priorityLabel, estimate, state, assignee, project, labels, url, branchName, createdAt, updatedAt, dueDate, trashed, archivedAt}`
 where `state` is `{id, name, type}`, `assignee` is `{id, name, email}`, `project` is `{id, name}`,
@@ -225,6 +233,12 @@ means `--issue` blocks `--related`; there is no `blocked_by` — invert the argu
 
 `--limit` defaults to 50. Linear caps a page at 250; the CLI auto-paginates above that, so
 `--limit 1000` works but costs four round trips.
+
+**All list commands paginate.** `teams list`, `users list`, `labels list`, `states list` and
+`projects list` each take `--limit` (default 250) and follow cursors, so a workspace with more
+entries than one page no longer silently loses the rest. `issues get` likewise paginates an
+issue's `relations`, which matters because a partial blocking chain would mis-sequence
+dependent work.
 
 #### bulk-create
 

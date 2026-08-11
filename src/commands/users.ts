@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { getClient } from '../client.js';
 import { errorMessage, outputData, outputError } from '../output.js';
+import { fetchAll, parseLimit } from '../paginate.js';
 
 export const usersCommand = new Command('users')
   .description('Manage users');
@@ -9,19 +10,24 @@ usersCommand
   .command('list')
   .description('List users')
   .option('--team <id>', 'Filter by team ID or key (e.g. ENG)')
-  .action(async (opts: { team?: string }) => {
+  .option('--limit <n>', 'Maximum number of users to return', '250')
+  .action(async (opts: { team?: string; limit?: string }) => {
     try {
       const client = getClient();
-      let userNodes;
+      const limit = parseLimit(opts.limit, 250);
 
-      if (opts.team) {
-        const team = await client.team(opts.team);
-        const members = await team.members();
-        userNodes = members.nodes;
-      } else {
-        const users = await client.users();
-        userNodes = users.nodes;
-      }
+      const userNodes = opts.team
+        ? await (async () => {
+            const team = await client.team(opts.team!);
+            return fetchAll(
+              ({ first, after }) => team.members({ first, ...(after ? { after } : {}) }),
+              limit
+            );
+          })()
+        : await fetchAll(
+            ({ first, after }) => client.users({ first, ...(after ? { after } : {}) }),
+            limit
+          );
 
       outputData(
         userNodes.map((u) => ({

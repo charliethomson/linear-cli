@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as readline from 'readline';
 import { getClient } from '../client.js';
 import { isUuid, NotFoundError, resolveIssueId, resolveTeamId } from '../resolve.js';
+import { fetchAll, isClear, parseIntOption, parseLimit } from '../paginate.js';
 import {
   errorMessage,
   isHumanMode,
@@ -43,6 +44,31 @@ const LIST_QUERY = `query Issues($first: Int!, $after: String, $filter: IssueFil
   }
 }`;
 
+// Relations were previously read via issue.relations() with no first/after, so
+// a long blocking chain was silently cut at the API's default page size — and
+// each relatedIssue was a separate lazy fetch, costing one round trip per
+// relation. thmsn-ultron treats these relations as authoritative sequencing, so
+// a partial chain means dependent work runs in the wrong order.
+const RELATIONS_QUERY = `query IssueRelationsPaged($id: String!, $first: Int!, $after: String) {
+  issue(id: $id) {
+    relations(first: $first, after: $after) {
+      nodes {
+        id
+        type
+        relatedIssue { id identifier title url }
+      }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+}`;
+
+async function fetchRelations(client: any, issueRef: string): Promise<any[]> {
+  return fetchAll<any>(async ({ first, after }) => {
+    const data: any = await client.client.request(RELATIONS_QUERY, { id: issueRef, first, after });
+    return data.issue.relations;
+  }, Number.MAX_SAFE_INTEGER);
+}
+
 issuesCommand
   .command('list')
   .description('List issues with optional filters')
@@ -79,7 +105,9 @@ issuesCommand
       if (opts.project) filter['project'] = { id: { eq: opts.project } };
       if (opts.assignee) filter['assignee'] = { id: { eq: opts.assignee } };
       if (opts.state) filter['state'] = { id: { eq: opts.state } };
-      if (opts.priority) filter['priority'] = { eq: parseInt(opts.priority, 10) };
+      if (opts.priority) {
+        filter['priority'] = { eq: parseIntOption(opts.priority, '--priority', { min: 0, max: 4 }) };
+      }
       if (opts.label) filter['labels'] = { some: { id: { eq: opts.label } } };
       if (opts.cycle) filter['cycle'] = { id: { eq: opts.cycle } };
       if (opts.search) filter['or'] = [
@@ -87,10 +115,7 @@ issuesCommand
         { description: { containsIgnoreCase: opts.search } },
       ];
 
-      const limit = parseInt(opts.limit ?? '50', 10);
-      if (!Number.isFinite(limit) || limit < 1) {
-        outputError('--limit must be a positive integer', 'INVALID_INPUT');
-      }
+      const limit = parseLimit(opts.limit, 50);
 
       const nodes: Record<string, unknown>[] = [];
       let after: string | null = null;
@@ -154,19 +179,18 @@ issuesCommand
       const state = await issue!.state;
       const assignee = await issue!.assignee;
       const project = await issue!.project;
-      const relationsConn = await issue!.relations();
-      const relations = await Promise.all(
-        relationsConn.nodes.map(async (r) => {
-          const relatedIssue = await r.relatedIssue;
-          return {
-            id: r.id,
-            type: r.type,
-            relatedIssue: relatedIssue
-              ? { id: relatedIssue.id, identifier: relatedIssue.identifier, title: relatedIssue.title, url: relatedIssue.url }
-              : null,
-          };
-        })
-      );
+      const relations = (await fetchRelations(client, issue!.id)).map((r: any) => ({
+        id: r.id,
+        type: r.type,
+        relatedIssue: r.relatedIssue
+          ? {
+              id: r.relatedIssue.id,
+              identifier: r.relatedIssue.identifier,
+              title: r.relatedIssue.title,
+              url: r.relatedIssue.url,
+            }
+          : null,
+      }));
 
       outputData({
         id: issue!.id,
@@ -237,12 +261,16 @@ issuesCommand
         teamId: await resolveTeamId(client, opts.team),
         title: opts.title,
         ...(description && { description }),
-        ...(opts.priority && { priority: parseInt(opts.priority, 10) }),
+        ...(opts.priority && {
+          priority: parseIntOption(opts.priority, '--priority', { min: 0, max: 4 }),
+        }),
         ...(opts.state && { stateId: opts.state }),
         ...(opts.assignee && { assigneeId: opts.assignee }),
         ...(opts.project && { projectId: opts.project }),
         ...(opts.label.length > 0 && { labelIds: opts.label }),
-        ...(opts.estimate && { estimate: parseInt(opts.estimate, 10) }),
+        ...(opts.estimate && {
+          estimate: parseIntOption(opts.estimate, '--estimate', { min: 0 }),
+        }),
       });
 
       const issue = await payload.issue;
@@ -271,10 +299,10 @@ issuesCommand
   .option('--description-file <path>', 'Read description from file')
   .option('--priority <0-4>', 'New priority (0=none, 1=urgent, 2=high, 3=medium, 4=low)')
   .option('--state <id>', 'New workflow state ID')
-  .option('--assignee <id>', 'New assignee user ID')
-  .option('--project <id>', 'New project ID')
-  .option('--label <id>', 'Label ID (replaces all labels)', (v, arr: string[]) => [...arr, v], [] as string[])
-  .option('--estimate <n>', 'New story point estimate')
+  .option('--assignee <id>', 'New assignee user ID ("none" to unassign)')
+  .option('--project <id>', 'New project ID ("none" to remove from its project)')
+  .option('--label <id>', 'Label ID (replaces all labels; "none" to remove all)', (v, arr: string[]) => [...arr, v], [] as string[])
+  .option('--estimate <n>', 'New story point estimate ("none" to clear)')
   .action(async (id: string, opts: {
     title?: string;
     description?: string;
@@ -296,15 +324,30 @@ issuesCommand
         description = fs.readFileSync('/dev/stdin', 'utf-8');
       }
 
+      // `none` clears a field. An omitted flag means "leave unchanged", so
+      // without a sentinel there was no way to express unassigning an issue or
+      // removing it from a project.
       const updates: Record<string, unknown> = {};
-      if (opts.title) updates['title'] = opts.title;
+      if (opts.title !== undefined) updates['title'] = opts.title;
       if (description !== undefined) updates['description'] = description;
-      if (opts.priority) updates['priority'] = parseInt(opts.priority, 10);
-      if (opts.state) updates['stateId'] = opts.state;
-      if (opts.assignee) updates['assigneeId'] = opts.assignee;
-      if (opts.project) updates['projectId'] = opts.project;
-      if (opts.label.length > 0) updates['labelIds'] = opts.label;
-      if (opts.estimate) updates['estimate'] = parseInt(opts.estimate, 10);
+      if (opts.priority !== undefined) {
+        updates['priority'] = parseIntOption(opts.priority, '--priority', { min: 0, max: 4 });
+      }
+      if (opts.state !== undefined) updates['stateId'] = opts.state;
+      if (opts.assignee !== undefined) {
+        updates['assigneeId'] = isClear(opts.assignee) ? null : opts.assignee;
+      }
+      if (opts.project !== undefined) {
+        updates['projectId'] = isClear(opts.project) ? null : opts.project;
+      }
+      if (opts.label.length > 0) {
+        updates['labelIds'] = opts.label.length === 1 && isClear(opts.label[0]!) ? [] : opts.label;
+      }
+      if (opts.estimate !== undefined) {
+        updates['estimate'] = isClear(opts.estimate)
+          ? null
+          : parseIntOption(opts.estimate, '--estimate', { min: 0 });
+      }
 
       if (Object.keys(updates).length === 0) {
         outputError('No update fields provided', 'MISSING_FIELDS');
@@ -390,10 +433,7 @@ issuesCommand
     try {
       const client = getClient();
 
-      const limit = parseInt(opts.limit ?? '50', 10);
-      if (!Number.isFinite(limit) || limit < 1) {
-        outputError('--limit must be a positive integer', 'INVALID_INPUT');
-      }
+      const limit = parseLimit(opts.limit, 50);
 
       const nodes: Record<string, unknown>[] = [];
       let after: string | null = null;
@@ -745,20 +785,7 @@ issueRelationsCommand
         throw err;
       }
 
-      const data = await (client.client as any).request(
-        `query IssueRelations($id: String!) {
-          issue(id: $id) {
-            relations {
-              nodes {
-                id
-                type
-                relatedIssue { identifier title url }
-              }
-            }
-          }
-        }`,
-        { id: issueId }
-      );
+      const data = { issue: { relations: { nodes: await fetchRelations(client, issueId) } } };
 
       outputData(
         // relatedIssue is null when the other issue sits in a team this key

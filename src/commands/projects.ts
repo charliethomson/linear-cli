@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import type { LinearClient } from '@linear/sdk';
 import { getClient } from '../client.js';
 import { isUuid, resolveTeamId } from '../resolve.js';
+import { fetchAll, parseLimit } from '../paginate.js';
 import { errorMessage, outputData, outputError, outputSuccess } from '../output.js';
 
 export const projectsCommand = new Command('projects')
@@ -87,9 +88,11 @@ projectsCommand
     '--state <state>',
     `Filter by status type (${STATUS_TYPES.join(', ')}) or status name`
   )
-  .action(async (opts: { team?: string; state?: string }) => {
+  .option('--limit <n>', 'Maximum number of projects to return', '250')
+  .action(async (opts: { team?: string; state?: string; limit?: string }) => {
     try {
       const client = getClient();
+      const limit = parseLimit(opts.limit, 250);
       const filter: Record<string, unknown> = {};
       // ProjectFilter exposes the team relation as `accessibleTeams`, not `teams`.
       if (opts.team) {
@@ -102,13 +105,22 @@ projectsCommand
           : { name: { eqIgnoreCase: opts.state } };
       }
 
-      const data: any = await (client.client as any).request(
-        `query Projects($filter: ProjectFilter) {
-          projects(first: 250, filter: $filter) { nodes { ${PROJECT_FIELDS} } }
-        }`,
-        Object.keys(filter).length ? { filter } : {}
+      const nodes = await fetchAll<any>(
+        async ({ first, after }) => {
+          const data: any = await (client.client as any).request(
+            `query Projects($first: Int!, $after: String, $filter: ProjectFilter) {
+              projects(first: $first, after: $after, filter: $filter) {
+                nodes { ${PROJECT_FIELDS} }
+                pageInfo { hasNextPage endCursor }
+              }
+            }`,
+            { first, after, ...(Object.keys(filter).length ? { filter } : {}) }
+          );
+          return data.projects;
+        },
+        limit
       );
-      outputData(data.projects.nodes.map(shapeProject));
+      outputData(nodes.map(shapeProject));
     } catch (err) {
       outputError(
         errorMessage(err, 'Failed to fetch projects'),

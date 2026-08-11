@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { getClient } from '../client.js';
 import { resolveTeamId } from '../resolve.js';
+import { fetchAll, parseLimit } from '../paginate.js';
 import { errorMessage, outputData, outputError, outputSuccess } from '../output.js';
 
 export const labelsCommand = new Command('labels')
@@ -10,17 +11,25 @@ labelsCommand
   .command('list')
   .description('List issue labels')
   .option('--team <id>', 'Filter by team ID or key (e.g. ENG)')
-  .action(async (opts: { team?: string }) => {
+  .option('--limit <n>', 'Maximum number of labels to return', '250')
+  .action(async (opts: { team?: string; limit?: string }) => {
     try {
       const client = getClient();
+      const limit = parseLimit(opts.limit, 250);
       const filter: Record<string, unknown> = {};
       if (opts.team) filter['team'] = { id: { eq: await resolveTeamId(client, opts.team) } };
 
-      const labels = await client.issueLabels(
-        Object.keys(filter).length ? { filter } : undefined
+      const nodes = await fetchAll(
+        ({ first, after }) =>
+          client.issueLabels({
+            first,
+            ...(after ? { after } : {}),
+            ...(Object.keys(filter).length ? { filter } : {}),
+          }),
+        limit
       );
       outputData(
-        labels.nodes.map((l) => ({
+        nodes.map((l) => ({
           id: l.id,
           name: l.name,
           color: l.color,
