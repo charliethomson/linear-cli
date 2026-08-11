@@ -16,7 +16,7 @@
     "reinstall": "npm run build && npm install -g ."
   },
   "dependencies": {
-    "@linear/sdk": "^32.0.0",
+    "@linear/sdk": "^89.0.0",
     "chalk": "^5.3.0",
     "cli-table3": "^0.6.5",
     "commander": "^14.0.0"

@@ -157,8 +157,19 @@ export function sdkIssue(over: Record<string, unknown> = {}): Record<string, unk
     labelIds: [],
     previousIdentifiers: [],
     reactionData: [],
-    // Required: the SDK's Issue constructor maps over this unconditionally.
+    // Fields the SDK's Issue constructor dereferences without a guard. This
+    // set grows between SDK majors — v89 added `sharedAccess` and `syncedWith`
+    // on top of v32's `reactions`. A TypeError from deep inside the SDK on
+    // upgrade usually means another one has been added here.
     reactions: [],
+    syncedWith: [],
+    sharedAccess: {
+      isShared: false,
+      sharedWithCount: 0,
+      viewerHasOnlySharedAccess: false,
+      disallowedIssueFields: [],
+      sharedWithUsers: [],
+    },
     state: { id: 's1', name: 'Todo', type: 'unstarted' },
     team: { id: 't1', key: 'ENG', name: 'Engineering' },
     ...over,
