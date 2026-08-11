@@ -254,7 +254,10 @@ projectsCommand
   .action(async (id: string) => {
     try {
       const client = getClient();
-      await client.archiveProject(id);
+      const payload = await client.archiveProject(id);
+      if (!payload.success) {
+        outputError('Failed to archive project', 'ARCHIVE_FAILED');
+      }
       outputSuccess('Project archived', { id });
     } catch (err) {
       outputError(
@@ -356,7 +359,10 @@ projectRelationsCommand
   .action(async (id: string) => {
     try {
       const client = getClient();
-      await client.deleteProjectRelation(id);
+      const payload = await client.deleteProjectRelation(id);
+      if (!payload.success) {
+        outputError('Failed to delete project relation', 'DELETE_FAILED');
+      }
       outputSuccess('Project relation deleted', { success: true });
     } catch (err) {
       outputError(

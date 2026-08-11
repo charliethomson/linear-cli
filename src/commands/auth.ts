@@ -5,6 +5,21 @@ import { outputData, outputError, outputSuccess } from '../output.js';
 export const authCommand = new Command('auth')
   .description('Manage authentication');
 
+/**
+ * Mask a key for display, showing at most its first 8 and last 4 characters.
+ *
+ * The previous form computed `'•'.repeat(key.length - 12)`, which threw a
+ * RangeError for any key of length 9-11 — reached by a malformed
+ * LINEAR_API_KEY, which is exactly when someone runs `auth status` to find out
+ * what is wrong. A 12-character key also printed in full, since the two visible
+ * slices covered it with no mask between them. Anything short enough for the
+ * windows to meet is masked completely.
+ */
+function maskKey(key: string): string {
+  if (key.length <= 12) return '•'.repeat(Math.max(8, key.length));
+  return key.slice(0, 8) + '•'.repeat(key.length - 12) + key.slice(-4);
+}
+
 authCommand
   .command('set <api-key>')
   .description('Store API key securely')
@@ -41,10 +56,7 @@ authCommand
       });
       return;
     }
-    const key = result.key;
-    const masked = key.length > 8
-      ? key.slice(0, 8) + '•'.repeat(key.length - 12) + key.slice(-4)
-      : '••••••••';
+    const masked = maskKey(result.key);
     outputData({
       configured: true,
       source: result.source,

@@ -53,7 +53,6 @@ function stubCreateIssue(): void {
 describe('finding 1 — bulk concurrency is not validated', () => {
   test(
     'a non-numeric --concurrency is rejected instead of silently creating nothing',
-    { todo: 'parseInt yields NaN, the chunk loop never runs, and it reports success with exit 0' },
     async () => {
       stubCreateIssue();
       const file = await bulkFile([
@@ -72,7 +71,6 @@ describe('finding 1 — bulk concurrency is not validated', () => {
 
   test(
     '--concurrency 0 is rejected rather than hanging forever',
-    { todo: 'slice(i, i+0) is always empty, so the loop never advances' },
     async () => {
       stubCreateIssue();
       const file = await bulkFile([{ team: 'ENG', title: 'one' }]);
@@ -91,7 +89,6 @@ describe('finding 1 — bulk concurrency is not validated', () => {
 describe('finding 3 — mutation success flags are ignored', () => {
   test(
     'archive reports failure when the API returns success: false',
-    { todo: 'archiveIssue payload is discarded; the CLI always prints success' },
     async () => {
       fake.reply({ contains: 'query issue(', data: { issue: sdkIssue() } });
       fake.reply({
@@ -108,7 +105,6 @@ describe('finding 3 — mutation success flags are ignored', () => {
 
   test(
     'issue-relation delete reports failure when the API returns success: false',
-    { todo: 'deleteIssueRelation payload is discarded' },
     async () => {
       fake.reply({
         contains: 'mutation deleteIssueRelation',
@@ -183,7 +179,6 @@ describe('finding 5 — truncated lists are indistinguishable from complete ones
 describe('finding 6 — null relatedIssue crashes relations list', () => {
   test(
     'a relation to an inaccessible issue does not throw a TypeError',
-    { todo: 'r.relatedIssue.identifier dereferences null' },
     async () => {
       fake.reply({ contains: 'query issue(', data: { issue: sdkIssue() } });
       fake.reply({
@@ -216,7 +211,6 @@ describe('finding 6 — null relatedIssue crashes relations list', () => {
 describe('finding 7 — auth status crashes on a short key', () => {
   test(
     'a malformed short key is masked, not fatal',
-    { todo: "'•'.repeat(key.length - 12) throws RangeError for keys of length 9-11" },
     async () => {
       const r = await runCli(['auth', 'status'], { apiKey: 'lin_api_xx' });
 
@@ -228,7 +222,6 @@ describe('finding 7 — auth status crashes on a short key', () => {
 
   test(
     'a masked key never reveals more than its first 8 and last 4 characters',
-    { todo: 'a 12-character key is printed in full, with zero mask characters' },
     async () => {
       const key = 'lin_api_1234';
       const r = await runCli(['auth', 'status'], { apiKey: key });
@@ -241,7 +234,6 @@ describe('finding 7 — auth status crashes on a short key', () => {
 describe('finding 8 — cycles get miscodes a missing cycle', () => {
   test(
     'a null cycle is NOT_FOUND, matching projects get',
-    { todo: 'data.cycle.id dereferences null and surfaces as FETCH_FAILED with a TypeError string' },
     async () => {
       fake.reply({ contains: 'query Cycle(', data: { cycle: null } });
 

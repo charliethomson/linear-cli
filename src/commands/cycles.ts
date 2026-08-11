@@ -124,6 +124,12 @@ cyclesCommand
       } catch {
         outputError(`Cycle '${id}' not found`, 'NOT_FOUND');
       }
+      // cycle(id:) resolves to null rather than erroring, so this has to be
+      // checked explicitly — otherwise the deref below threw a TypeError that
+      // surfaced as FETCH_FAILED. `projects get` already handles this case.
+      if (!data.cycle) {
+        outputError(`Cycle '${id}' not found`, 'NOT_FOUND');
+      }
       const tallies = await tallyCycleIssues(client, [data.cycle.id]);
       outputData(shapeCycle(data.cycle, tallies.get(data.cycle.id)));
     } catch (err) {

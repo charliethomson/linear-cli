@@ -468,7 +468,10 @@ issuesCommand
     try {
       const client = getClient();
       const issueId = await resolveIssueId(client, id);
-      await client.archiveIssue(issueId);
+      const payload = await client.archiveIssue(issueId);
+      if (!payload.success) {
+        outputError('Failed to archive issue', 'ARCHIVE_FAILED');
+      }
       outputSuccess('Issue archived', { id: issueId });
     } catch (err) {
       outputError(
@@ -509,6 +512,12 @@ issuesCommand
 
       const items = parsed as Record<string, unknown>[];
       const concurrency = parseInt(opts.concurrency, 10);
+      // NaN made the chunk loop's condition false immediately, so the command
+      // created nothing and still reported success; 0 made slice() always empty,
+      // so it looped forever.
+      if (!Number.isFinite(concurrency) || concurrency < 1) {
+        outputError('--concurrency must be a positive integer', 'INVALID_INPUT');
+      }
       const created: Array<{ id: string; identifier: string; title: string; url: string }> = [];
       const failed: Array<{ input: unknown; error: string }> = [];
 
@@ -596,6 +605,12 @@ issuesCommand
 
       const items = parsed as Record<string, unknown>[];
       const concurrency = parseInt(opts.concurrency, 10);
+      // NaN made the chunk loop's condition false immediately, so the command
+      // created nothing and still reported success; 0 made slice() always empty,
+      // so it looped forever.
+      if (!Number.isFinite(concurrency) || concurrency < 1) {
+        outputError('--concurrency must be a positive integer', 'INVALID_INPUT');
+      }
       const updated: Array<{ id: string; identifier: string; title: string; url: string }> = [];
       const failed: Array<{ input: unknown; error: string }> = [];
 
@@ -660,7 +675,10 @@ issuesCommand
     try {
       const client = getClient();
       const issueId = await resolveIssueId(client, id);
-      await client.unarchiveIssue(issueId);
+      const payload = await client.unarchiveIssue(issueId);
+      if (!payload.success) {
+        outputError('Failed to unarchive issue', 'UPDATE_FAILED');
+      }
       outputSuccess('Issue unarchived', { id: issueId });
     } catch (err) {
       outputError(
@@ -692,7 +710,10 @@ issuesCommand
       }
       const client = getClient();
       const issueId = await resolveIssueId(client, id);
-      await client.deleteIssue(issueId);
+      const payload = await client.deleteIssue(issueId);
+      if (!payload.success) {
+        outputError('Failed to delete issue', 'DELETE_FAILED');
+      }
       outputSuccess('Issue moved to Trash', { id: issueId, trashed: true });
     } catch (err) {
       outputError(
@@ -740,12 +761,16 @@ issueRelationsCommand
       );
 
       outputData(
+        // relatedIssue is null when the other issue sits in a team this key
+        // cannot read. Dereferencing it threw a TypeError that surfaced as a
+        // FETCH_FAILED for the whole command, hiding the relations that *are*
+        // readable.
         (data as any).issue.relations.nodes.map((r: any) => ({
           id: r.id,
           type: r.type,
-          relatedIssueIdentifier: r.relatedIssue.identifier,
-          relatedIssueTitle: r.relatedIssue.title,
-          relatedIssueUrl: r.relatedIssue.url,
+          relatedIssueIdentifier: r.relatedIssue?.identifier ?? null,
+          relatedIssueTitle: r.relatedIssue?.title ?? null,
+          relatedIssueUrl: r.relatedIssue?.url ?? null,
         }))
       );
     } catch (err) {
@@ -808,7 +833,10 @@ issueRelationsCommand
   .action(async (id: string) => {
     try {
       const client = getClient();
-      await client.deleteIssueRelation(id);
+      const payload = await client.deleteIssueRelation(id);
+      if (!payload.success) {
+        outputError('Failed to delete issue relation', 'DELETE_FAILED');
+      }
       outputSuccess('Issue relation deleted', { success: true });
     } catch (err) {
       outputError(
