@@ -3,7 +3,14 @@ import * as fs from 'fs';
 import * as readline from 'readline';
 import { getClient } from '../client.js';
 import { isUuid, resolveIssueId, resolveTeamId } from '../resolve.js';
-import { errorMessage, isHumanMode, outputData, outputError, outputSuccess } from '../output.js';
+import {
+  errorMessage,
+  isHumanMode,
+  isNotFoundError,
+  outputData,
+  outputError,
+  outputSuccess,
+} from '../output.js';
 
 export const issuesCommand = new Command('issues')
   .description('Manage issues');
@@ -346,6 +353,110 @@ issuesCommand
       outputError(
         errorMessage(err, 'Failed to create comment'),
         'CREATE_FAILED'
+      );
+    }
+  });
+
+// Fetched as one flat query rather than through the SDK's `issue.comments()`,
+// because the SDK returns each comment's `user` as a lazy LinearFetch — reading
+// the author of N comments would cost N extra round trips.
+const COMMENTS_QUERY = `query IssueComments($id: String!, $first: Int!, $after: String) {
+  issue(id: $id) {
+    id
+    identifier
+    comments(first: $first, after: $after, orderBy: createdAt) {
+      nodes {
+        id
+        body
+        createdAt
+        updatedAt
+        editedAt
+        resolvedAt
+        url
+        parentId
+        user { id name email displayName }
+        botActor { id name type }
+      }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+}`;
+
+issuesCommand
+  .command('comments <id>')
+  .description('Read the comments on an issue by identifier (e.g. ENG-123) or UUID')
+  .option('--limit <n>', 'Maximum number of comments to return (auto-paginates above 250)', '50')
+  .action(async (id: string, opts: { limit?: string }) => {
+    try {
+      const client = getClient();
+
+      const limit = parseInt(opts.limit ?? '50', 10);
+      if (!Number.isFinite(limit) || limit < 1) {
+        outputError('--limit must be a positive integer', 'INVALID_INPUT');
+      }
+
+      const nodes: Record<string, unknown>[] = [];
+      let after: string | null = null;
+      let issue: { id: string; identifier: string } | null = null;
+      let hasMore = false;
+
+      while (nodes.length < limit) {
+        const data: any = await (client.client as any).request(COMMENTS_QUERY, {
+          id,
+          first: Math.min(PAGE_MAX, limit - nodes.length),
+          after,
+        });
+        if (!data.issue) {
+          outputError(`Issue '${id}' not found`, 'NOT_FOUND');
+        }
+        issue = { id: data.issue.id, identifier: data.issue.identifier };
+        nodes.push(...data.issue.comments.nodes);
+        hasMore = data.issue.comments.pageInfo.hasNextPage;
+        if (!hasMore) break;
+        after = data.issue.comments.pageInfo.endCursor;
+      }
+
+      // The API orders newest-first, so --limit selects the most recent N.
+      // They are reversed here because comments are read as a narrative —
+      // a resuming agent wants the boundary comments in the order they happened.
+      outputData({
+        issue,
+        comments: nodes.reverse().map((c: any) => ({
+          id: c.id,
+          body: c.body,
+          createdAt: c.createdAt,
+          updatedAt: c.updatedAt,
+          editedAt: c.editedAt ?? null,
+          resolvedAt: c.resolvedAt ?? null,
+          url: c.url,
+          // Present when the comment is a threaded reply, so a caller can
+          // reconstruct threads without a second query.
+          parentId: c.parentId ?? null,
+          user: c.user
+            ? {
+                id: c.user.id,
+                name: c.user.name,
+                email: c.user.email,
+                displayName: c.user.displayName,
+              }
+            : null,
+          botActor: c.botActor
+            ? { id: c.botActor.id, name: c.botActor.name, type: c.botActor.type }
+            : null,
+        })),
+        // Unlike the older list commands, a truncated result says so.
+        hasMore,
+      });
+    } catch (err) {
+      // Linear reports a bad issue reference as a GraphQL error rather than a
+      // null field, so the not-found case has to be classified here to stay
+      // consistent with `issues get`.
+      if (isNotFoundError(err)) {
+        outputError(`Issue '${id}' not found`, 'NOT_FOUND');
+      }
+      outputError(
+        errorMessage(err, 'Failed to fetch comments'),
+        'FETCH_FAILED'
       );
     }
   });

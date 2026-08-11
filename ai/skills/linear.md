@@ -112,7 +112,8 @@ linear issues list [--team <id|key>] [--project <id>] [--assignee <id>]
 linear issues get <identifier>              # ENG-123 or UUID
 linear issues create --team <id|key> --title <t> [options...]
 linear issues update <identifier> [options...]
-linear issues comment <identifier> --body <text>
+linear issues comment <identifier> --body <text>      # write one comment
+linear issues comments <identifier> [--limit <n>]     # read the comment history
 linear issues archive <identifier>
 linear issues unarchive <identifier>
 linear issues delete <identifier>           # moves to Trash; prompts only in --human mode
@@ -148,6 +149,51 @@ it. `issues archive` sets `archivedAt` without `trashed`. `issues list` excludes
 `issues get <identifier>` still resolves them — so **check `trashed` / `archivedAt` before
 treating a `get` result as a live issue**. A `get` that succeeds does not mean the issue is
 active.
+
+#### Reading comments
+
+`issues comment` (singular) writes one comment; `issues comments` (plural) reads the history.
+This is the command a resuming agent uses to replay what happened on a task.
+
+```bash
+linear issues comments ENG-123
+linear issues comments ENG-123 --limit 200
+```
+
+Output shape:
+```json
+{
+  "data": {
+    "issue": {"id": "...", "identifier": "ENG-123"},
+    "comments": [
+      {
+        "id": "...",
+        "body": "markdown body",
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-01-01T00:00:00.000Z",
+        "editedAt": null,
+        "resolvedAt": null,
+        "url": "https://linear.app/.../#comment-...",
+        "parentId": null,
+        "user": {"id": "...", "name": "...", "email": "...", "displayName": "..."},
+        "botActor": null
+      }
+    ],
+    "hasMore": false
+  }
+}
+```
+
+- **Ordering is oldest-first**, so the history reads as a narrative. The API returns
+  newest-first, so `--limit` selects the *most recent* N and they are then reversed —
+  `--limit 10` gives you the last ten comments in chronological order.
+- **`hasMore`** is `true` when more comments exist beyond what was returned. Unlike the older
+  list commands, a truncated result says so — check it before treating the history as complete.
+- **`parentId`** is non-null on threaded replies, so threads can be reconstructed without a
+  second query.
+- **`user` is null** for comments made by an integration; `botActor` carries the actor instead.
+- `--limit` defaults to 50 and auto-paginates above the 250-per-page cap.
+- An unknown issue returns `{"error": "...", "code": "NOT_FOUND"}` with exit 1.
 
 `--search` matches title or description (case-insensitive substring), not full-text search.
 

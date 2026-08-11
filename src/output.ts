@@ -39,6 +39,25 @@ export function errorMessage(err: unknown, fallback: string): string {
   return fallback;
 }
 
+/**
+ * Whether a failure is specifically "this entity does not exist".
+ *
+ * Deliberately narrow. Linear answers a bad reference with a GraphQL error
+ * rather than a null field, so a caller cannot tell not-found from a transport
+ * failure by looking at the data alone — but catching *everything* and calling
+ * it not-found is exactly how a 429 ends up reported as a missing issue. This
+ * matches the API's own not-found signal and nothing else.
+ */
+export function isNotFoundError(err: unknown): boolean {
+  const graphqlErrors = (err as any)?.response?.errors ?? (err as any)?.errors;
+  if (!Array.isArray(graphqlErrors)) return false;
+  return graphqlErrors.some(
+    (e: any) =>
+      /entity not found/i.test(e?.message ?? '') ||
+      /could not find referenced/i.test(e?.extensions?.userPresentableMessage ?? '')
+  );
+}
+
 export function outputError(message: string, code: string, details?: unknown): never {
   if (_humanMode) {
     process.stderr.write(chalk.red(`Error [${code}]: ${message}\n`));
