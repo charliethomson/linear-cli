@@ -297,6 +297,26 @@ by Linear.
 the cost of four round trips. `issues get` paginates an issue's `relations` too, so a long
 blocking chain is not silently cut short.
 
+## Versioning
+
+The version is derived from git, never stored in a manifest:
+
+```
+VERSION = <tag MAJOR>.<tag MINOR>.<total commit count>
+```
+
+`MAJOR.MINOR` comes from the most recent `v[0-9]*` tag (the tag's own patch component is
+ignored) and is the only manual knob — tag when you want a human-meaningful boundary.
+Everything else rides the commit count, which is monotonic and never resets, so a higher
+version always means a later commit.
+
+`package.json`'s `version` is a static `0.0.1` placeholder and is **not** the source of truth;
+don't bump it. `scripts/version.sh` does the derivation, and the build injects the result. CI
+sets `RELEASE_VERSION` once per run, which takes precedence. Outside a git checkout — an install
+from a packed tarball — it reports `0.0.0`.
+
+See [standards/docs/versioning.md](standards/docs/versioning.md).
+
 ## Development
 
 ```bash

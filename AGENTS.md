@@ -25,19 +25,14 @@ Cargo. It follows the *shape* of the standards rather than the Rust mechanics:
 | [Error handling](standards/docs/error-handling.md) | No `thiserror` trinity. Errors map to a stable `{"error","code"}` JSON envelope on stderr with exit 1 — see the error-code table in the README. |
 | [Identifiers](standards/docs/identifiers.md) | `dev.thmsn.linear-cli` is recorded here but not surfaced at runtime; there is no `libproduct` for Node. Deferred, as in `igrip`. |
 | [CI/CD](standards/docs/ci-cd.md) | **Compliant.** `.github/workflows/ci.yml` on `push: main` + `pull_request`, with `concurrency` cancel-in-progress. |
+| [Versioning](standards/docs/versioning.md) | **Compliant.** `MAJOR.MINOR.<commit count>` derived by `scripts/version.sh` and injected at build time; `package.json` holds a static `0.0.1` placeholder. |
 | [Workflow](standards/docs/workflow.md) | **Compliant.** Commits go straight to `main`. |
-| [Testing](standards/docs/testing.md) | **Compliant in spirit.** 98 tests over the JSON output contract, error mapping, pagination and arg parsing — the surfaces the archetype names. No coverage gate is wired up. |
+| [Testing](standards/docs/testing.md) | **Compliant in spirit.** 102 tests over the JSON output contract, error mapping, pagination and arg parsing — the surfaces the archetype names. No coverage gate is wired up. |
 
 ### Open gaps
 
 Real deviations rather than N/A, listed so they are not mistaken for done:
 
-- **Versioning does not derive from git.** [versioning.md](standards/docs/versioning.md)
-  requires `MAJOR.MINOR.<commit count>` derived from tags and never stored in a manifest. This
-  repo stores the version in `package.json` (npm requires it there) and injects it into the
-  bundle at build time via esbuild `--define`. That removes the *duplication* the standard is
-  guarding against, but not the manifest storage. Aligning would mean deriving the count in CI
-  and writing it into `package.json` before packing.
 - **Not published to the registry.** [registry-publishing.md](standards/docs/registry-publishing.md)
   is the defining standard for this archetype. This tool installs with `npm install -g .` from
   a local clone, which symlinks the global bin back into the working tree — so a build here is

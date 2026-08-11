@@ -1,13 +1,14 @@
 {
   "name": "linear-cli",
-  "version": "1.0.0",
+  "version": "0.0.1",
+  "//version": "Static placeholder \u2014 NOT the source of truth. The real version is derived from git at build time (scripts/version.sh). See standards/docs/versioning.md.",
   "description": "CLI tool for interacting with Linear, optimized for AI consumption",
   "bin": {
     "linear": "./dist/linear.js"
   },
   "scripts": {
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
-    "build": "npm run typecheck && esbuild src/index.ts --bundle --platform=node --format=cjs --target=node18 --define:__CLI_VERSION__=\\\"$npm_package_version\\\" --banner:js='#!/usr/bin/env node' --outfile=dist/linear.js && chmod +x dist/linear.js",
+    "build": "npm run typecheck && esbuild src/index.ts --bundle --platform=node --format=cjs --target=node18 --define:__CLI_VERSION__=\\\"$(sh scripts/version.sh)\\\" --banner:js='#!/usr/bin/env node' --outfile=dist/linear.js && chmod +x dist/linear.js",
     "dev": "tsx src/index.ts",
     "start": "node dist/linear.js",
     "prepare": "npm run build",

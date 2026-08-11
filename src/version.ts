@@ -1,10 +1,13 @@
 /**
- * The CLI version, injected at build time by esbuild from package.json.
+ * The CLI version, injected at build time by esbuild.
  *
- * It used to be written out a second time as a literal in index.ts, which meant
- * `linear --version` and the published package version could disagree with
- * nothing to catch it. package.json is the single source; the build passes it
- * through `--define`.
+ *   VERSION = <tag MAJOR>.<tag MINOR>.<total commit count>
+ *
+ * Derived from git by scripts/version.sh, never read from package.json — the
+ * manifest holds a static placeholder. The commit count is monotonic and never
+ * resets, so a higher version always means a later commit, which is the whole
+ * point: it answers "which commit is this?" from a `--version` string alone.
+ * See standards/docs/versioning.md.
  *
  * The fallback covers `npm run dev`, where tsx runs the sources directly and no
  * define has been applied. `typeof` rather than a direct read, because the
